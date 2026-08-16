@@ -77,6 +77,18 @@ if st.session_state.history:
                 st.write("No supporting source was retrieved.")
 
             with st.expander("Retrieval debug"):
+                # Show query enhancement info if available
+                if "query_debug" in item and item["query_debug"]:
+                    debug = item["query_debug"]
+                    st.markdown("**Query Enhancement**")
+                    st.write(f"Original: {debug.get('original_question', 'N/A')}")
+                    st.write(f"Enhanced: {debug.get('enhanced_question', 'N/A')}")
+                    if debug.get('pattern_matched'):
+                        st.write(f"Pattern matched: {debug.get('pattern_matched')}")
+                    st.divider()
+                
+                # Show retrieved chunks
+                st.markdown("**Retrieved Chunks**")
                 for i, chunk in enumerate(item["retrieved"], start=1):
                     similarity = (
                         f"{chunk.similarity:.4f}" if chunk.similarity is not None else "N/A"

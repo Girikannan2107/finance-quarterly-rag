@@ -18,7 +18,14 @@ class FinanceRAG:
         self.embedder = OpenAIEmbedder()
         self.store = ChromaStore()
         self.retriever = Retriever(self.embedder, self.store)
-        self.llm = GroundedLLM()
+        self._llm = None  # Lazy initialization
+
+    @property
+    def llm(self) -> GroundedLLM:
+        """Lazily initialize LLM only when needed."""
+        if self._llm is None:
+            self._llm = GroundedLLM()
+        return self._llm
 
     @property
     def indexed(self) -> bool:
@@ -82,46 +89,9 @@ class FinanceRAG:
     def retrieve(self, question: str, top_k: int = TOP_K) -> list[RetrievedChunk]:
         if not self.indexed:
             raise RuntimeError("No documents have been indexed yet.")
-
-        # Query rewriting to map conversational questions to tabular report sheets
-        lower_q = question.lower()
-        enhanced_q = question
-
-        # Resolve the latest quarter from the indexed database
-        latest = "Q4 FY25"
-        try:
-            res_get = self.store.collection.get(include=["metadatas"])
-            metadatas = res_get.get("metadatas", [])
-            if metadatas:
-                quarters = set(m["quarter"] for m in metadatas if m and "quarter" in m)
-                if quarters:
-                    def sort_key(q_str: str):
-                        parts = q_str.split()
-                        if len(parts) == 2:
-                            q_num = parts[0][1:]
-                            fy_num = parts[1][2:]
-                            return (int(fy_num), int(q_num))
-                        return (0, 0)
-                    sorted_qs = sorted(quarters, key=sort_key, reverse=True)
-                    latest = sorted_qs[0]
-        except Exception:
-            pass
-
-        # Apply mapping rules
-        if "revenue" in lower_q and ("latest" in lower_q or "current" in lower_q or "most recent" in lower_q):
-            enhanced_q = f"Revenue from operations Consolidated Statement HCLTech {latest}"
-        elif "net profit" in lower_q or "profit" in lower_q:
-            if any(w in lower_q for w in ["across", "change", "comparison", "trend", "quarters"]):
-                enhanced_q = f"Profit for the period year comprehensive income HCLTech Q1 Q2 Q3 {latest}"
-        elif any(w in lower_q for w in ["year-on-year", "yoy", "year on year"]):
-            if "revenue" in lower_q:
-                enhanced_q = f"Revenue from operations Year ended 31 March 2025 2024 Consolidated Statement HCLTech {latest}"
-        elif "operating margin" in lower_q or "margin trend" in lower_q:
-            enhanced_q = f"Segment results Segment revenues IT services Engineering HCL Software operating margin HCLTech Q1 Q2 Q3 {latest}"
-        elif any(term in lower_q for term in ["latest quarter", "most recent quarter", "current quarter"]):
-            enhanced_q = f"{question} (the latest quarter is {latest})"
-
-        return self.retriever.retrieve(enhanced_q, top_k=top_k)
+        
+        # Delegate to retriever, which handles query enhancement
+        return self.retriever.retrieve(question, top_k=top_k)
 
 
 
@@ -140,11 +110,16 @@ class FinanceRAG:
 
     def ask(self, question: str, top_k: int = TOP_K) -> dict:
         chunks = self.retrieve(question, top_k=top_k)
+        
+        # Get query debug info from retriever
+        query_debug = getattr(self.retriever, 'last_query_debug', None)
+        
         if not chunks:
             return {
                 "answer": "I cannot answer this from the uploaded financial reports because the required information is not present in the retrieved context.",
                 "sources": [],
                 "retrieved": [],
+                "query_debug": query_debug,
             }
         context = self._context_from_chunks(chunks)
         answer = self.llm.answer(question, context)
@@ -157,4 +132,9 @@ class FinanceRAG:
                 unique_sources.append(
                     {"file": chunk.source, "page": chunk.page, "quarter": chunk.quarter}
                 )
-        return {"answer": answer, "sources": unique_sources, "retrieved": chunks}
+        return {
+            "answer": answer,
+            "sources": unique_sources,
+            "retrieved": chunks,
+            "query_debug": query_debug,
+        }
