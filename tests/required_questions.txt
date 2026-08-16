@@ -1,0 +1,10 @@
+1. What was the revenue in the latest quarter?
+2. How did net profit change across the reported quarters?
+3. What was the year-on-year revenue comparison?
+4. What did management say about demand?
+5. Which segment grew the fastest?
+6. What is the operating margin trend across the quarters?
+7. What dividend was declared?
+8. What risks or headwinds did management mention?
+9. Give me a three-line summary of the quarterly results.
+10. What was HCLTech's share price on 15 August 2026?  [TRAP — must refuse]
